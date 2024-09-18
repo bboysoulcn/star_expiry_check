@@ -1,0 +1,10 @@
+name: star_expiry_check
+on: [push]
+jobs:
+  scan:
+    name: star_expiry_check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: bboysoulcn/star_expiry_check@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
