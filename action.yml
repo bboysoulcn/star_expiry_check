@@ -1,0 +1,9 @@
+name: 'star_expiry_check'
+description: 'Check if the star is expired'
+author: 'bboysoul'
+branding:
+  icon: 'star'
+  color: 'gray-dark'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
