@@ -1,4 +1,5 @@
 FROM python:3.11-alpine
+WORKDIR /github/workspace/
 RUN apk add gcc python3-dev linux-headers libc-dev libffi libffi-dev --no-cache
 RUN pip install poetry==1.7.0
 COPY pyproject.toml poetry.lock README.md ./
