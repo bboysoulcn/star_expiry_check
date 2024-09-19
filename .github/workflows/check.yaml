@@ -5,6 +5,7 @@ jobs:
     name: star_expiry_check
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
       - uses: bboysoulcn/star_expiry_check@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
