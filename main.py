@@ -11,7 +11,7 @@ from rich.syntax import Syntax
 import json
 import os
 
-token = os.environ.get('GITHUB_TOKEN')
+token = os.environ.get('TOKEN')
 client = httpx.AsyncClient()
 semaphore = asyncio.Semaphore(50)
 console = Console()
