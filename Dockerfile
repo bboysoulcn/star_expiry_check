@@ -1,3 +1,3 @@
 FROM python:3.11-alpine
 COPY . .
-CMD ["./entrypoint.sh"]
+CMD ["sh","./entrypoint.sh"]
