@@ -6,7 +6,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: echo ${{ secrets.TOKEN }}
       - uses: bboysoulcn/star_expiry_check@main
         env:
           TOKEN: ${{ secrets.TOKEN }}
