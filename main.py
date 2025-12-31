@@ -10,13 +10,16 @@ from rich.console import Console
 from rich.syntax import Syntax
 import json
 import os
+import functools
 
 token = os.environ.get('TOKEN')
 client = httpx.AsyncClient()
-semaphore = asyncio.Semaphore(50)
+semaphore = asyncio.Semaphore(100)
 console = Console()
 
 
+# 缓存获取关注仓库的结果
+@functools.lru_cache(maxsize=1)
 # 获取关注的仓库
 async def get_followed_repos():
     headers = {
@@ -36,6 +39,9 @@ async def get_followed_repos():
             else:
                 for repo in response:
                     all_repo.append(repo["full_name"])
+        else:
+            logger.error(f"获取仓库失败，状态码: {response.status_code}")
+            break
     logger.info("获取到的 repo 为" + str(len(all_repo)))
     return all_repo
 
@@ -72,10 +78,10 @@ async def get_data(repo):
 async def main():
     all_repo = await get_followed_repos()
     tasks = [get_data(repo) for repo in all_repo]
-    results = await asyncio.gather(*tasks)
-    
-    # 过滤掉 None 值并创建最终的 JSON 对象
-    filtered_results = [result for result in results if result]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # 过滤掉 None 值和异常
+    filtered_results = [result for result in results if result and not isinstance(result, Exception)]
     json_output = json.dumps(filtered_results, ensure_ascii=False, indent=2)
 
     # 使用 rich 来美化输出
