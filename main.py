@@ -37,7 +37,11 @@ def load_cache():
             cache_time = datetime.datetime.fromisoformat(cache_data.get('timestamp', ''))
             if datetime.datetime.now() - cache_time < datetime.timedelta(hours=CACHE_EXPIRY_HOURS):
                 logger.info(f"使用缓存数据，缓存时间: {cache_time}")
-                return cache_data.get('repos', [])
+                repos = cache_data.get('repos', [])
+                # 兼容旧缓存格式（纯字符串列表 → dict 列表）
+                if repos and isinstance(repos[0], str):
+                    repos = [{"full_name": r, "stars": 0} for r in repos]
+                return repos
     except Exception as e:
         logger.warning(f"读取缓存失败: {e}")
     return None
@@ -80,7 +84,7 @@ async def get_followed_repos():
     
     all_repo = []
     first_page = response.json()
-    all_repo.extend([repo["full_name"] for repo in first_page])
+    all_repo.extend([{"full_name": repo["full_name"], "stars": repo.get("stargazers_count", 0)} for repo in first_page])
     
     # 检查是否有更多页
     link_header = response.headers.get('Link', '')
@@ -98,7 +102,7 @@ async def get_followed_repos():
                 try:
                     resp = await client.get(url=url, headers=headers)
                     if resp.status_code == 200:
-                        return [repo["full_name"] for repo in resp.json()]
+                        return [{"full_name": repo["full_name"], "stars": repo.get("stargazers_count", 0)} for repo in resp.json()]
                 except Exception as e:
                     logger.error(f"获取第 {page_num} 页失败: {e}")
                 return []
@@ -121,11 +125,16 @@ async def get_followed_repos():
     return all_repo
 
 
-async def get_data(repo):
-    """获取仓库发布信息，带重试机制"""
+async def get_data(repo_info):
+    """获取仓库发布信息和 star 数量，带重试机制"""
     async with semaphore:
-        url = f"https://github.com/{repo}/releases.atom"
+        repo_name = repo_info["full_name"]
+        stars = repo_info.get("stars", 0)
+        url = f"https://github.com/{repo_name}/releases.atom"
         max_retries = 3
+        
+        # 预先判断 star 情况
+        star_low = stars < 1000
         
         for attempt in range(max_retries):
             try:
@@ -133,13 +142,19 @@ async def get_data(repo):
                 
                 if response.status_code != 200:
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(1 * (attempt + 1))  # 指数退避
+                        await asyncio.sleep(1 * (attempt + 1))
                         continue
-                    return {"repo": repo, "status": "无法获取数据"}
+                    result = {"repo": repo_name, "stars": stars, "status": "无法获取数据"}
+                    if star_low:
+                        result["status"] = "无法获取数据且star数目小于1k"
+                    return result
 
                 rss = feedparser.parse(response.text).entries
                 if not rss:
-                    return {"repo": repo, "status": "没有 release"}
+                    result = {"repo": repo_name, "stars": stars, "status": "没有 release"}
+                    if star_low:
+                        result["status"] = "没有 release且star数目小于1k"
+                    return result
 
                 latest_release = rss[0]
                 updated = latest_release['updated']
@@ -147,24 +162,35 @@ async def get_data(repo):
                 updated_datetime = updated_datetime.replace(tzinfo=datetime.timezone.utc)
                 
                 now = datetime.datetime.now(datetime.timezone.utc)
+                expired = now - updated_datetime > datetime.timedelta(days=365)
                 
-                if now - updated_datetime > datetime.timedelta(days=365):
-                    return {
-                        "repo": repo,
-                        "status": "超过一年未更新",
-                        "latest_release": latest_release['title'],
-                        "last_updated": updated,
-                        "url": latest_release['link']
+                if expired or star_low:
+                    result = {
+                        "repo": repo_name,
+                        "stars": stars,
                     }
+                    issues = []
+                    if expired:
+                        issues.append("超过一年未更新")
+                        result["latest_release"] = latest_release['title']
+                        result["last_updated"] = updated
+                        result["url"] = latest_release['link']
+                    if star_low:
+                        issues.append("star数目小于1k")
+                    result["status"] = "且".join(issues)
+                    return result
 
                 return None
                 
             except Exception as e:
-                logger.warning(f"处理 {repo} 时出错 (尝试 {attempt + 1}/{max_retries}): {e}")
+                logger.warning(f"处理 {repo_name} 时出错 (尝试 {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(1 * (attempt + 1))
                 else:
-                    return {"repo": repo, "status": f"处理失败: {str(e)}"}
+                    result = {"repo": repo_name, "stars": stars, "status": f"处理失败: {str(e)}"}
+                    if star_low:
+                        result["status"] = f"star数目小于1k且处理失败: {str(e)}"
+                    return result
 
 async def main():
     start_time = time.time()
@@ -203,7 +229,7 @@ async def main():
     console.print(syntax)
     
     elapsed_time = time.time() - start_time
-    logger.info(f"总共发现 {len(all_filtered_results)} 个超过一年未更新的仓库")
+    logger.info(f"总共发现 {len(all_filtered_results)} 个需要关注的仓库（超过一年未更新或 star 不足 1k）")
     logger.info(f"总耗时: {elapsed_time:.2f} 秒")
     
     # 清理连接
