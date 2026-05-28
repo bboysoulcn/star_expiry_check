@@ -144,14 +144,14 @@ async def get_data(repo_info):
                     if attempt < max_retries - 1:
                         await asyncio.sleep(1 * (attempt + 1))
                         continue
-                    result = {"repo": repo_name, "stars": stars, "status": "无法获取数据"}
+                    result = {"repo": repo_name, "repo_url": f"https://github.com/{repo_name}", "stars": stars, "status": "无法获取数据"}
                     if star_low:
                         result["status"] = "无法获取数据且star数目小于1k"
                     return result
 
                 rss = feedparser.parse(response.text).entries
                 if not rss:
-                    result = {"repo": repo_name, "stars": stars, "status": "没有 release"}
+                    result = {"repo": repo_name, "repo_url": f"https://github.com/{repo_name}", "stars": stars, "status": "没有 release"}
                     if star_low:
                         result["status"] = "没有 release且star数目小于1k"
                     return result
@@ -167,6 +167,7 @@ async def get_data(repo_info):
                 if expired or star_low:
                     result = {
                         "repo": repo_name,
+                        "repo_url": f"https://github.com/{repo_name}",
                         "stars": stars,
                     }
                     issues = []
@@ -187,7 +188,7 @@ async def get_data(repo_info):
                 if attempt < max_retries - 1:
                     await asyncio.sleep(1 * (attempt + 1))
                 else:
-                    result = {"repo": repo_name, "stars": stars, "status": f"处理失败: {str(e)}"}
+                    result = {"repo": repo_name, "repo_url": f"https://github.com/{repo_name}", "stars": stars, "status": f"处理失败: {str(e)}"}
                     if star_low:
                         result["status"] = f"star数目小于1k且处理失败: {str(e)}"
                     return result
